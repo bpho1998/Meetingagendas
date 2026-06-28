@@ -1,0 +1,43 @@
+name: SF BOS Agenda Notifier
+
+on:
+  schedule:
+    # Runs every day at 9 AM and 3 PM Pacific (17:00 and 01:00 UTC)
+    # Agendas typically post Friday morning, but this catches any day
+    - cron: "0 17 * * *"
+    - cron: "0 1  * * *"
+  workflow_dispatch:  # allow manual trigger from the Actions tab
+
+permissions:
+  contents: write  # needed to commit seen_event_ids.json back
+
+jobs:
+  check-agendas:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run agenda checker
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          LOOKBACK_HOURS: "13"   # slightly more than half a day to avoid gaps
+        run: python check_agendas.py
+
+      - name: Commit updated seen_event_ids.json
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add seen_event_ids.json
+          # Only commit if the file actually changed
+          git diff --staged --quiet || git commit -m "chore: update seen event IDs [skip ci]"
+          git push
